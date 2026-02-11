@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>チーム対抗投票システム</title>
+    <title>リアルタイム・チーム対抗投票</title>
     <style>
         :root {
             --bg-color: #f0f4f8;
@@ -41,6 +41,96 @@
 
         @media (max-width: 500px) { #vote-buttons { grid-template-columns: 1fr; } .dashboard { gap: 20px; } }
     </style>
+
+    <script type="module">
+        // Firebaseライブラリの読み込み
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, onSnapshot, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+  apiKey: "AIzaSyBTvG063QBo6ysEb4HoBbw6v7fWrDRcm6E",
+  authDomain: "test-af1d1.firebaseapp.com",
+  projectId: "test-af1d1",
+  storageBucket: "test-af1d1.firebasestorage.app",
+  messagingSenderId: "990318534784",
+  appId: "1:990318534784:web:8c77e48725c13d559ec665",
+  measurementId: "G-67MYXQ80L5"
+};
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const docRef = doc(db, "votes", "main");
+
+        const schoolData = [
+            { id: 'koyuki', name: 'コユキ', field: 'A', color: '#ff8fb1' },
+            { id: 'iroha', name: 'イロハ', field: 'B', color: '#b34d7a' },
+            { id: 'azusa', name: 'アズサ', field: 'C', color: '#7ba2ff' }
+        ];
+
+        // UI初期生成
+        window.addEventListener('DOMContentLoaded', () => {
+            const btnContainer = document.getElementById('vote-buttons');
+            const legendContainer = document.getElementById('legend-container');
+            
+            schoolData.forEach(team => {
+                legendContainer.innerHTML += `
+                    <div class="legend-item">
+                        <span class="dot" style="background: ${team.color}"></span>
+                        <span>${team.name}</span>
+                        <span class="percent" id="percent-${team.id}">0.0%</span>
+                    </div>`;
+
+                btnContainer.innerHTML += `
+                    <button onclick="castVote('${team.field}')">
+                        <img src="images/${team.id}.png" alt="${team.name}" onerror="this.src='https://placehold.jp/30/${team.color.replace('#','')}/ffffff/100x100.png?text=${team.name[0]}'">
+                        <span class="team-name">${team.name.toUpperCase()}</span>
+                        <span class="vote-count" id="btn-count-${team.id}">0</span>
+                    </button>`;
+            });
+        });
+
+        // 投票処理（Firestoreを更新）
+        window.castVote = async (field) => {
+            try {
+                await updateDoc(docRef, { [field]: increment(1) });
+            } catch (e) {
+                console.error("投票エラー:", e);
+            }
+        };
+
+        // データのリアルタイム監視
+        onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) {
+                updateUI(docSnap.data());
+            }
+        });
+
+        function updateUI(data) {
+            // A, B, C の合計を計算
+            const total = (data.A || 0) + (data.B || 0) + (data.C || 0);
+            document.getElementById('total-votes').innerText = total.toLocaleString();
+
+            let currentDeg = 0;
+            let gradientParts = [];
+
+            schoolData.forEach(team => {
+                const count = data[team.field] || 0;
+                const percent = total > 0 ? (count / total * 100) : 0;
+                const deg = (percent / 100) * 360;
+
+                document.getElementById(`percent-${team.id}`).innerText = percent.toFixed(1) + "%";
+                document.getElementById(`btn-count-${team.id}`).innerText = count.toLocaleString();
+
+                if (deg > 0) {
+                    gradientParts.push(`${team.color} ${currentDeg}deg ${currentDeg + deg}deg`);
+                    currentDeg += deg;
+                }
+            });
+
+            const donut = document.getElementById('donut-chart');
+            donut.style.background = gradientParts.length ? `conic-gradient(${gradientParts.join(', ')})` : '#e0e0e0';
+        }
+    </script>
 </head>
 <body>
 
@@ -53,59 +143,8 @@
 
     <div id="vote-buttons"></div>
 
-    <script>
-        // チーム設定
-        const schoolData = [
-            { id: 'koyuki', name: 'コユキ', color: '#ff8fb1' }, // ピンク系
-            { id: 'iroha', name: 'イロハ', color: '#b34d7a' },  // 赤紫系
-            { id: 'azusa', name: 'アズサ', color: '#7ba2ff' }   // 青系
-        ];
-
-        // モックデータ (初期値)
-        let votes = { koyuki: 0, iroha: 0, azusa: 0 };
-
-        const buttonContainer = document.getElementById('vote-buttons');
-        const legendContainer = document.getElementById('legend-container');
-        const donutChart = document.getElementById('donut-chart');
-        const totalVotesEl = document.getElementById('total-votes');
-
-        // UI生成
-        schoolData.forEach(team => {
-            // 凡例
-            legendContainer.innerHTML += `
-                <div class="legend-item">
-                    <span class="dot" style="background: ${team.color}"></span>
-                    <span>${team.name}</span>
-                    <span class="percent" id="percent-${team.id}">0.0%</span>
-                </div>`;
-
-            // ボタン
-            buttonContainer.innerHTML += `
-                <button onclick="castVote('${team.id}')">
-                    <img src="images/${team.id}.png" alt="${team.name}" onerror="this.src='https://placehold.jp/30/${team.color.replace('#','')}/ffffff/100x100.png?text=${team.name[0]}'">
-                    <span class="team-name">${team.name.toUpperCase()}</span>
-                    <span class="vote-count" id="btn-count-${team.id}">0</span>
-                </button>`;
-        });
-
-        // 投票処理
-        function castVote(teamId) {
-            votes[teamId]++;
-            updateUI(votes);
-            
-            // 本番環境ではここに fetch('vote.php', ...) を記述
-        }
-
-        // 画面更新
-        function updateUI(data) {
-            const total = Object.values(data).reduce((a, b) => a + b, 0);
-            totalVotesEl.innerText = total.toLocaleString();
-
-            let currentDeg = 0;
-            let gradientParts = [];
-
-            schoolData.forEach(team => {
-                const count = data[team.id] || 0;
+</body>
+</html>
                 const percent = total > 0 ? (count / total * 100) : 0;
                 const deg = (percent / 100) * 360;
 
