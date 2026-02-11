@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>チーム対抗投票システム</title>
+    <style>
+        :root {
+            --bg-color: #f0f4f8;
+            --card-bg: #ffffff;
+            --text-main: #2c3e50;
+        }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg-color); color: var(--text-main); display: flex; flex-direction: column; align-items: center; padding: 40px 20px; margin: 0; }
+        
+        /* グラフエリア */
+        .dashboard { display: flex; align-items: center; gap: 50px; background: var(--card-bg); padding: 40px; border-radius: 24px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); margin-bottom: 40px; flex-wrap: wrap; justify-content: center; }
+        
+        #donut-chart { width: 220px; height: 220px; border-radius: 50%; background: #e0e0e0; position: relative; transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        #donut-chart::after { content: ""; position: absolute; top: 20%; left: 20%; width: 60%; height: 60%; background: white; border-radius: 50%; box-shadow: inset 0 2px 5px rgba(0,0,0,0.05); }
+
+        /* 凡例 */
+        #legend-container { display: flex; flex-direction: column; gap: 15px; min-width: 180px; }
+        .legend-item { display: flex; align-items: center; gap: 12px; font-size: 16px; font-weight: 600; }
+        .dot { width: 14px; height: 14px; border-radius: 4px; }
+        .percent { font-family: 'Courier New', Courier, monospace; color: #7f8c8d; margin-left: auto; }
+
+        /* 投票ボタン */
+        .total-display { font-size: 24px; font-weight: 800; margin-bottom: 25px; color: #34495e; }
+        .total-display span { color: #3498db; }
+
+        #vote-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; width: 100%; max-width: 600px; }
+        
+        button { border: 2px solid transparent; background: var(--card-bg); padding: 25px 15px; border-radius: 20px; cursor: pointer; box-shadow: 0 8px 15px rgba(0,0,0,0.05); transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+        button:hover { transform: translateY(-5px); box-shadow: 0 12px 20px rgba(0,0,0,0.1); border-color: #ddd; }
+        button:active { transform: scale(0.95); }
+        
+        button img { width: 70px; height: 70px; border-radius: 50%; background: #f9f9f9; object-fit: cover; border: 3px solid #eee; }
+        .team-name { font-size: 16px; font-weight: bold; letter-spacing: 1px; }
+        .vote-count { font-size: 18px; font-weight: 900; color: #2980b9; }
+
+        @media (max-width: 500px) { #vote-buttons { grid-template-columns: 1fr; } .dashboard { gap: 20px; } }
+    </style>
+</head>
+<body>
+
+    <div class="total-display">TOTAL VOTES: <span id="total-votes">0</span></div>
+
+    <div class="dashboard">
+        <div id="donut-chart"></div>
+        <div id="legend-container"></div>
+    </div>
+
+    <div id="vote-buttons"></div>
+
+    <script>
+        // チーム設定
+        const schoolData = [
+            { id: 'koyuki', name: 'コユキ', color: '#ff8fb1' }, // ピンク系
+            { id: 'iroha', name: 'イロハ', color: '#b34d7a' },  // 赤紫系
+            { id: 'azusa', name: 'アズサ', color: '#7ba2ff' }   // 青系
+        ];
+
+        // モックデータ (初期値)
+        let votes = { koyuki: 0, iroha: 0, azusa: 0 };
+
+        const buttonContainer = document.getElementById('vote-buttons');
+        const legendContainer = document.getElementById('legend-container');
+        const donutChart = document.getElementById('donut-chart');
+        const totalVotesEl = document.getElementById('total-votes');
+
+        // UI生成
+        schoolData.forEach(team => {
+            // 凡例
+            legendContainer.innerHTML += `
+                <div class="legend-item">
+                    <span class="dot" style="background: ${team.color}"></span>
+                    <span>${team.name}</span>
+                    <span class="percent" id="percent-${team.id}">0.0%</span>
+                </div>`;
+
+            // ボタン
+            buttonContainer.innerHTML += `
+                <button onclick="castVote('${team.id}')">
+                    <img src="images/${team.id}.png" alt="${team.name}" onerror="this.src='https://placehold.jp/30/${team.color.replace('#','')}/ffffff/100x100.png?text=${team.name[0]}'">
+                    <span class="team-name">${team.name.toUpperCase()}</span>
+                    <span class="vote-count" id="btn-count-${team.id}">0</span>
+                </button>`;
+        });
+
+        // 投票処理
+        function castVote(teamId) {
+            votes[teamId]++;
+            updateUI(votes);
+            
+            // 本番環境ではここに fetch('vote.php', ...) を記述
+        }
+
+        // 画面更新
+        function updateUI(data) {
+            const total = Object.values(data).reduce((a, b) => a + b, 0);
+            totalVotesEl.innerText = total.toLocaleString();
+
+            let currentDeg = 0;
+            let gradientParts = [];
+
+            schoolData.forEach(team => {
+                const count = data[team.id] || 0;
+                const percent = total > 0 ? (count / total * 100) : 0;
+                const deg = (percent / 100) * 360;
+
+                // パーセントと個別のカウント表示更新
+                document.getElementById(`percent-${team.id}`).innerText = percent.toFixed(1) + "%";
+                document.getElementById(`btn-count-${team.id}`).innerText = count.toLocaleString();
+
+                if (deg > 0) {
+                    gradientParts.push(`${team.color} ${currentDeg}deg ${currentDeg + deg}deg`);
+                    currentDeg += deg;
+                }
+            });
+
+            // グラフの背景を更新
+            if (gradientParts.length === 0) {
+                donutChart.style.background = '#e0e0e0';
+            } else {
+                donutChart.style.background = `conic-gradient(${gradientParts.join(', ')})`;
+            }
+        }
+
+        // 初回呼び出し
+        updateUI(votes);
+    </script>
+</body>
+</html>
+
