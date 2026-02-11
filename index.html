@@ -13,19 +13,16 @@
 
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg-color); color: var(--text-main); display: flex; flex-direction: column; align-items: center; padding: 40px 20px; margin: 0; }
         
-        /* グラフエリア */
         .dashboard { display: flex; align-items: center; gap: 50px; background: var(--card-bg); padding: 40px; border-radius: 24px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); margin-bottom: 40px; flex-wrap: wrap; justify-content: center; }
         
         #donut-chart { width: 220px; height: 220px; border-radius: 50%; background: #e0e0e0; position: relative; transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
         #donut-chart::after { content: ""; position: absolute; top: 20%; left: 20%; width: 60%; height: 60%; background: white; border-radius: 50%; box-shadow: inset 0 2px 5px rgba(0,0,0,0.05); }
 
-        /* 凡例 */
         #legend-container { display: flex; flex-direction: column; gap: 15px; min-width: 180px; }
         .legend-item { display: flex; align-items: center; gap: 12px; font-size: 16px; font-weight: 600; }
         .dot { width: 14px; height: 14px; border-radius: 4px; }
         .percent { font-family: 'Courier New', Courier, monospace; color: #7f8c8d; margin-left: auto; }
 
-        /* 投票ボタン */
         .total-display { font-size: 24px; font-weight: 800; margin-bottom: 25px; color: #34495e; }
         .total-display span { color: #3498db; }
 
@@ -33,7 +30,6 @@
         
         button { border: 2px solid transparent; background: var(--card-bg); padding: 25px 15px; border-radius: 20px; cursor: pointer; box-shadow: 0 8px 15px rgba(0,0,0,0.05); transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; gap: 12px; }
         button:hover { transform: translateY(-5px); box-shadow: 0 12px 20px rgba(0,0,0,0.1); border-color: #ddd; }
-        button:active { transform: scale(0.95); }
         
         button img { width: 70px; height: 70px; border-radius: 50%; background: #f9f9f9; object-fit: cover; border: 3px solid #eee; }
         .team-name { font-size: 16px; font-weight: bold; letter-spacing: 1px; }
@@ -41,9 +37,19 @@
 
         @media (max-width: 500px) { #vote-buttons { grid-template-columns: 1fr; } .dashboard { gap: 20px; } }
     </style>
+</head>
+<body>
+
+    <div class="total-display">TOTAL VOTES: <span id="total-votes">0</span></div>
+
+    <div class="dashboard">
+        <div id="donut-chart"></div>
+        <div id="legend-container"></div>
+    </div>
+
+    <div id="vote-buttons"></div>
 
     <script type="module">
-        // Firebaseライブラリの読み込み
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, doc, onSnapshot, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
@@ -67,45 +73,72 @@
             { id: 'azusa', name: 'アズサ', field: 'C', color: '#7ba2ff' }
         ];
 
-        // UI初期生成
-        window.addEventListener('DOMContentLoaded', () => {
-            const btnContainer = document.getElementById('vote-buttons');
-            const legendContainer = document.getElementById('legend-container');
-            
-            schoolData.forEach(team => {
-                legendContainer.innerHTML += `
-                    <div class="legend-item">
-                        <span class="dot" style="background: ${team.color}"></span>
-                        <span>${team.name}</span>
-                        <span class="percent" id="percent-${team.id}">0.0%</span>
-                    </div>`;
+        const btnContainer = document.getElementById('vote-buttons');
+        const legendContainer = document.getElementById('legend-container');
 
-                btnContainer.innerHTML += `
-                    <button onclick="castVote('${team.field}')">
-                        <img src="images/${team.id}.png" alt="${team.name}" onerror="this.src='https://placehold.jp/30/${team.color.replace('#','')}/ffffff/100x100.png?text=${team.name[0]}'">
-                        <span class="team-name">${team.name.toUpperCase()}</span>
-                        <span class="vote-count" id="btn-count-${team.id}">0</span>
-                    </button>`;
+        // UI生成
+        schoolData.forEach(team => {
+            legendContainer.innerHTML += `
+                <div class="legend-item">
+                    <span class="dot" style="background: ${team.color}"></span>
+                    <span>${team.name}</span>
+                    <span class="percent" id="percent-${team.id}">0.0%</span>
+                </div>`;
+
+            btnContainer.innerHTML += `
+                <button id="btn-${team.id}">
+                    <img src="https://placehold.jp/30/${team.color.replace('#','')}/ffffff/100x100.png?text=${team.name[0]}" 
+                         alt="${team.name}">
+                    <span class="team-name">${team.name.toUpperCase()}</span>
+                    <span class="vote-count" id="btn-count-${team.id}">0</span>
+                </button>`;
+        });
+
+        // 投票クリックイベントの登録
+        schoolData.forEach(team => {
+            document.getElementById(`btn-${team.id}`).addEventListener('click', () => {
+                castVote(team.field);
             });
         });
 
-        // 投票処理（Firestoreを更新）
-        window.castVote = async (field) => {
+        async function castVote(field) {
             try {
                 await updateDoc(docRef, { [field]: increment(1) });
             } catch (e) {
                 console.error("投票エラー:", e);
             }
-        };
+        }
 
-        // データのリアルタイム監視
         onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
-                updateUI(docSnap.data());
+                const data = docSnap.data();
+                const total = (data.A || 0) + (data.B || 0) + (data.C || 0);
+                document.getElementById('total-votes').innerText = total.toLocaleString();
+
+                let currentDeg = 0;
+                let gradientParts = [];
+
+                schoolData.forEach(team => {
+                    const count = data[team.field] || 0;
+                    const percent = total > 0 ? (count / total * 100) : 0;
+                    const deg = (percent / 100) * 360;
+
+                    document.getElementById(`percent-${team.id}`).innerText = percent.toFixed(1) + "%";
+                    document.getElementById(`btn-count-${team.id}`).innerText = count.toLocaleString();
+
+                    if (deg > 0) {
+                        gradientParts.push(`${team.color} ${currentDeg}deg ${currentDeg + deg}deg`);
+                        currentDeg += deg;
+                    }
+                });
+
+                document.getElementById('donut-chart').style.background = 
+                    gradientParts.length ? `conic-gradient(${gradientParts.join(', ')})` : '#e0e0e0';
             }
         });
-
-        function updateUI(data) {
+    </script>
+</body>
+</html>
             // A, B, C の合計を計算
             const total = (data.A || 0) + (data.B || 0) + (data.C || 0);
             document.getElementById('total-votes').innerText = total.toLocaleString();
